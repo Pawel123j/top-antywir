@@ -1,8 +1,20 @@
 # Top Antywir
 
-A cross-platform antivirus prototype written in Python — runs on **Windows, Linux and macOS**, with both a CLI and a modern dark-theme desktop GUI. Intentionally simple, no paid cloud, no kernel driver, no hidden telemetry.
+> **WARNING: This is a prototype — NOT a working antivirus.**
+> Top Antywir is an educational proof-of-concept. It does **not** provide real
+> protection: it will not reliably detect or stop actual malware, and it must
+> **not** be used as your computer's real antivirus. Treat it strictly as a
+> learning project and a starting point.
+>
+> **UWAGA: To jest prototyp antywirusa, a nie działający antywirus.**
+> Top Antywir to projekt edukacyjny / dowód koncepcji. **Nie** zapewnia realnej
+> ochrony — nie wykryje ani nie zatrzyma prawdziwego złośliwego oprogramowania
+> i **nie** wolno używać go jako właściwego antywirusa na komputerze. Traktuj go
+> wyłącznie jako projekt do nauki i punkt wyjścia.
 
-> Note: This is a prototype. Real commercial antivirus products do far more (signed signature updates, real-time kernel-level monitor, tamper protection, lab certification). Top Antywir is a usable on-demand **and** real-time scanner with quarantine, audit log, extensible signature packs and scheduled scans — good as a teaching tool and a starting point.
+A cross-platform antivirus **prototype** written in Python — runs on **Windows, Linux and macOS**, with both a CLI and a modern dark-theme desktop GUI. Intentionally simple, no paid cloud, no kernel driver, no hidden telemetry.
+
+> Note: Real commercial antivirus products do far more (signed signature updates, real-time kernel-level monitor, tamper protection, lab certification). Top Antywir is a usable on-demand **and** real-time *prototype* scanner with quarantine, audit log, extensible signature packs and scheduled scans — good as a teaching tool and a starting point, but not a substitute for a real antivirus.
 
 ## Features
 
