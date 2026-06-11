@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.test-tmp/
+dist/
+build/
+*.egg-info/
+
+# Local tooling / scratch (never published)
+.claude/settings.local.json
+.scratch/

@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Top Antywir
+GenericName=Antivirus Scanner
+Comment=Simple Linux antivirus prototype — scan files and folders
+Exec=top-antywir-gui
+Icon=top-antywir
+Terminal=false
+Categories=Utility;Security;System;
+Keywords=antivirus;security;scanner;malware;virus;
+StartupNotify=true
+StartupWMClass=TopAntywir

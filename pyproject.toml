@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "top-antywir"
+dynamic = ["version"]
+description = "Cross-platform antivirus prototype with CLI + modern dark-theme GUI."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+  { name = "Paweł Jankowicz" }
+]
+license = { text = "MIT" }
+dependencies = ["customtkinter>=5.2"]
+
+[project.scripts]
+top-antywir = "top_antywir.cli:main"
+top-antywir-gui = "top_antywir.gui:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["top_antywir*"]
+
+[tool.setuptools.package-data]
+top_antywir = ["assets/icon.png", "assets/icon.ico"]
+
+[tool.setuptools.dynamic]
+version = {attr = "top_antywir.__version__"}
