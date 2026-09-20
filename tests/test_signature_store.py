@@ -9,7 +9,6 @@ from pathlib import Path
 from top_antywir import signature_store as store
 from top_antywir.signatures import HASH_SIGNATURES, PATTERN_SIGNATURES
 
-
 _GOOD_PACK = {
     "name": "unit-pack",
     "hashes": [

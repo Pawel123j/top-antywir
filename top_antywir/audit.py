@@ -8,9 +8,9 @@ failure must never block actual scanning.
 """
 from __future__ import annotations
 
+import json
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
-import json
 from pathlib import Path
 from typing import Any
 

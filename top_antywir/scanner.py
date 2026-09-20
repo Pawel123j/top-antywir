@@ -2,21 +2,19 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator
-from dataclasses import dataclass, field
-from enum import Enum
 import hashlib
 import math
 import os
-from pathlib import Path
 import stat
 import threading
-from typing import Iterable
+from collections.abc import Callable, Iterable, Iterator
+from dataclasses import dataclass, field
+from enum import Enum
+from pathlib import Path
 
 from .signature_store import all_signatures
 from .signatures import HashSignature, PatternSignature
 from .targets import EXCLUDED_DIR_NAMES, EXCLUDED_FILE_NAMES
-
 
 MAX_TEXT_SCAN_BYTES = 2 * 1024 * 1024
 MAX_ENTROPY_BYTES = 1024 * 1024

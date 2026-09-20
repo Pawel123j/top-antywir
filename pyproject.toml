@@ -14,6 +14,13 @@ authors = [
 license = { text = "MIT" }
 dependencies = ["customtkinter>=5.2"]
 
+[project.optional-dependencies]
+# Wersja ruffa przypięta tak samo jak w CI: domyślny zestaw reguł zmienia się
+# między wydaniami, a linter, który u każdego mówi co innego, jest gorszy niż
+# brak lintera.
+dev = ["pytest>=8", "ruff==0.16.8"]
+build = ["pyinstaller>=6.10"]
+
 [project.scripts]
 top-antywir = "top_antywir.cli:main"
 top-antywir-gui = "top_antywir.gui:main"
@@ -27,3 +34,41 @@ top_antywir = ["assets/icon.png", "assets/icon.ico"]
 
 [tool.setuptools.dynamic]
 version = {attr = "top_antywir.__version__"}
+
+[tool.ruff]
+# Wersja rulesetu przypięta jawnie: domyślny zestaw reguł ruffa zmienia się
+# między wydaniami, więc bez tego CI potrafi zapalić się na czerwono po
+# aktualizacji narzędzia, przy niezmienionym kodzie.
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+  "E",    # pycodestyle
+  "F",    # pyflakes
+  "I",    # isort — kolejność importów
+  "UP",   # pyupgrade — składnia nieaktualna dla docelowego Pythona
+  "B",    # bugbear — realne pułapki, nie styl
+  "DTZ",  # datetime bez strefy czasowej
+  "SIM",  # uproszczenia
+  "RUF",
+]
+ignore = [
+  # Komentarze i napisy interfejsu są po polsku i używają typografii
+  # (półpauza, znak mnożenia). Ostrzeżenie o "znakach dwuznacznych" dotyczy
+  # kodu, nie prozy — tu generowałoby wyłącznie szum.
+  "RUF001", "RUF002", "RUF003",
+  # Skaner z założenia nie może paść przez jeden nietypowy plik albo jeden
+  # uszkodzony pakiet sygnatur, więc szerokie `except Exception` jest tu
+  # decyzją projektową, a nie niedopatrzeniem. Miejsca, gdzie to występuje,
+  # mają komentarz wyjaśniający.
+  "BLE001",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Testy mogą używać asercji i dłuższych, opisowych nazw.
+"tests/*" = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

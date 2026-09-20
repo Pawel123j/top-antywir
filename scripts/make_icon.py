@@ -13,7 +13,6 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 
-
 # Colours match top_antywir/gui.py palette
 BG_TRANSPARENT = (0, 0, 0, 0)
 SHIELD_FILL    = (88, 166, 255, 255)   # ACCENT  #58a6ff

@@ -17,16 +17,15 @@ timeout, so cancellation is immediate.
 """
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
-import threading
 from pathlib import Path
 
 from .audit import AuditLog
 from .quarantine import Quarantine
-from .scanner import ScanResult, Scanner
-
+from .scanner import Scanner, ScanResult
 
 # (mtime, size) fingerprint used to decide whether a file changed.
 _Fingerprint = tuple[float, int]

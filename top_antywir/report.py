@@ -15,7 +15,6 @@ from pathlib import Path
 from . import __version__
 from .scanner import ScanResult, Verdict
 
-
 _VERDICT_LABEL = {
     Verdict.CLEAN: "Clean",
     Verdict.SUSPICIOUS: "Suspicious",
@@ -55,7 +54,10 @@ def render_html_report(
     derived from ``results``.
     """
     quarantined = quarantined or {}
-    generated_at = generated_at or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # `astimezone()` bez argumentu dokleja lokalną strefę: raport ma
+    # pokazywać czas użytkownika, a nie UTC, ale znacznik bez strefy
+    # jest dwuznaczny w chwili, gdy ktoś wyśle raport dalej.
+    generated_at = generated_at or datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
 
     if counts is None:
         counts = {verdict: 0 for verdict in Verdict}

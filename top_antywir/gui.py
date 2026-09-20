@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
+import contextlib
 import queue
 import sys
-import time
 import threading
+import time
 import tkinter as tk
 import webbrowser
-from tkinter import filedialog, messagebox, ttk
 from pathlib import Path
+from tkinter import filedialog, messagebox, ttk
 
 # Make Tk pixel-perfect on high-DPI Windows displays. Must run before
 # any Tk window is created, otherwise widgets get bitmap-scaled by the OS.
@@ -31,10 +32,9 @@ from .audit import AuditLog
 from .monitor import FolderMonitor
 from .quarantine import Quarantine, QuarantineItem
 from .report import write_html_report
-from .scanner import ScanResult, Scanner, Verdict
+from .scanner import Scanner, ScanResult, Verdict
 from .targets import full_scan_targets, quick_scan_targets
 from .utils import reveal_in_file_manager
-
 
 ASSETS_DIR = Path(__file__).resolve().parent / "assets"
 ICON_PNG   = ASSETS_DIR / "icon.png"
@@ -196,7 +196,9 @@ class TopAntywirApp(ctk.CTk):
         self._monitor_detections = 0
 
         self.target_var = tk.StringVar()
-        self.status_var = tk.StringVar(value="Gotowy.  ⚡ Skanuj / 🚀 Szybkie / 🌐 Pełne  ·  Ctrl+O / Ctrl+Shift+O / F5")
+        self.status_var = tk.StringVar(
+            value="Gotowy.  ⚡ Skanuj / 🚀 Szybkie / 🌐 Pełne  ·  Ctrl+O / Ctrl+Shift+O / F5"
+        )
         self.progress_var = tk.DoubleVar(value=0.0)
         self.progress_label_var = tk.StringVar(value="")
 
@@ -885,10 +887,10 @@ class TopAntywirApp(ctk.CTk):
             "Top Antywir",
             f"Zapisano raport:\n{written}\n\nOtworzyć w przeglądarce?",
         ):
-            try:
+            # Brak przeglądarki albo ścieżka, której nie da się zamienić na
+            # URI, nie może wywrócić okna po udanym zapisie raportu.
+            with contextlib.suppress(OSError, ValueError):
                 webbrowser.open(written.as_uri())
-            except (OSError, ValueError):
-                pass
 
     # ── Real-time monitor ─────────────────────────────────────────────────────
 
@@ -939,10 +941,10 @@ class TopAntywirApp(ctk.CTk):
         self._add_detection(result)
         self.export_btn.configure(state="normal")
         self.status_var.set(f"🛡 Monitor wykrył zagrożenie: {result.path}")
-        try:
+        # Dzwonek systemowy bywa wyłączony albo niedostępny — to nie powód,
+        # żeby przerwać obsługę wykrycia.
+        with contextlib.suppress(tk.TclError):
             self.bell()
-        except tk.TclError:
-            pass
 
     def _on_monitor_stopped(self) -> None:
         self._monitor_stop = None

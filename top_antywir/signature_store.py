@@ -26,10 +26,10 @@ Pack format (JSON)::
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import json
-from pathlib import Path
 import re
+from dataclasses import dataclass, field
+from pathlib import Path
 
 from .paths import user_data_dir
 from .signatures import (
@@ -38,7 +38,6 @@ from .signatures import (
     HashSignature,
     PatternSignature,
 )
-
 
 VALID_SEVERITIES = frozenset({"low", "medium", "high"})
 
@@ -66,7 +65,7 @@ class LoadReport:
     patterns: list[PatternSignature] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
 
-    def extend(self, other: "LoadReport") -> None:
+    def extend(self, other: LoadReport) -> None:
         self.hashes.extend(other.hashes)
         self.patterns.extend(other.patterns)
         self.errors.extend(other.errors)

@@ -12,6 +12,8 @@
 > i **nie** wolno używać go jako właściwego antywirusa na komputerze. Traktuj go
 > wyłącznie jako projekt do nauki i punkt wyjścia.
 
+[![CI](https://github.com/Pawel123j/top-antywir/actions/workflows/ci.yml/badge.svg)](https://github.com/Pawel123j/top-antywir/actions/workflows/ci.yml)
+
 A cross-platform antivirus **prototype** written in Python — runs on **Windows, Linux and macOS**, with both a CLI and a modern dark-theme desktop GUI. Intentionally simple, no paid cloud, no kernel driver, no hidden telemetry.
 
 > Note: Real commercial antivirus products do far more (signed signature updates, real-time kernel-level monitor, tamper protection, lab certification). Top Antywir is a usable on-demand **and** real-time *prototype* scanner with quarantine, audit log, extensible signature packs and scheduled scans — good as a teaching tool and a starting point, but not a substitute for a real antivirus.
@@ -172,13 +174,68 @@ On Windows your real antivirus will probably eat the EICAR file before Top Antyw
 ## Development
 
 ```bash
-python -m unittest discover -s tests
+python -m pip install -e ".[dev]"   # albo: pip install pytest ruff
+python -m pytest                    # 65 testów
+ruff check .                        # linter (konfiguracja w pyproject.toml)
+python -m top_antywir scan ~/Downloads
 ```
 
-Regenerate the app icon (requires Pillow):
+### CI
+
+`.github/workflows/ci.yml` uruchamia na każdej gałęzi trzy zadania:
+
+| Zadanie | Co robi |
+|---|---|
+| Testy | 65 testów na **Ubuntu, Windows i macOS**, na Pythonie 3.10 i 3.13 (6 kombinacji) |
+| Ruff | Linter z wersją przypiętą w workflow |
+| Binarka | PyInstaller na trzech systemach + **uruchomienie** zbudowanej binarki na pliku EICAR |
+
+Macierz ma `fail-fast: false` celowo: w projekcie, który chwali się
+wieloplatformowością, najważniejszą informacją z przebiegu jest to, czy
+problem dotyczy wszystkich systemów, czy jednego. Przerwanie po pierwszym
+czerwonym tę informację niszczy.
+
+Zadanie „Binarka" nie kończy się na zbudowaniu pliku — uruchamia go
+i sprawdza, że wykrywa EICAR. Build, którego nikt nie uruchomił, nie jest
+dowodem na nic.
+
+### Wydania
+
+`.github/workflows/release.yml` buduje binarki na trzy systemy, sprawdza
+każdą z nich na pliku EICAR, liczy sumy kontrolne SHA-256 i publikuje
+wydanie:
 
 ```bash
-python scripts/make_icon.py
+git tag v0.4.0
+git push origin v0.4.0
+```
+
+Sumy kontrolne są dołączane świadomie: binarka antywirusa pobrana
+z internetu bez możliwości weryfikacji to dokładnie ten scenariusz, przed
+którym ten program ostrzega.
+
+### Dokumentacja
+
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — warstwy, decyzje projektowe
+  i ich uzasadnienia, przepływ skanowania, czego testy **nie** pokrywają.
+- [docs/SIGNATURE-PACKS.md](docs/SIGNATURE-PACKS.md) — pełny format pakietów
+  sygnatur, zasada pierwszeństwa, pułapki przy pisaniu wzorców.
+- [examples/example-pack.json](examples/example-pack.json) — gotowy do
+  zaimportowania przykład.
+
+### Zrzuty ekranu GUI
+
+Katalog `docs/screenshots/` jest pusty i to jest świadome: zrzuty interfejsu
+wymagają środowiska z tkinterem i serwerem okien, a `scripts/screenshot_gui.py`
+w obecnej postaci działa wyłącznie na Windowsie (używa `ctypes.windll`
+i `ImageGrab`). Wstawienie tu wizualizacji zamiast prawdziwego zrzutu byłoby
+gorsze niż brak obrazka.
+
+Żeby je zrobić, na Windowsie:
+
+```bash
+pip install -e . pillow
+python scripts/screenshot_gui.py    # zapisuje do %TEMP%\top-antywir-shot.png
 ```
 
 ## What This Is Not Yet

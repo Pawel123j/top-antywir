@@ -1,16 +1,15 @@
 from __future__ import annotations
 
-from pathlib import Path
-from contextlib import contextmanager
 import hashlib
 import stat
 import unittest
 import uuid
+from contextlib import contextmanager
+from pathlib import Path
 
 from top_antywir.quarantine import Quarantine
 from top_antywir.scanner import Scanner, Verdict
 from top_antywir.signatures import HashSignature
-
 
 TEST_MALWARE_SAMPLE = b"top-antywir harmless hash test fixture\n"
 

@@ -1,0 +1,122 @@
+name: Release
+
+# Uruchamiane tagiem: git tag v0.4.0 && git push origin v0.4.0
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Binarka — ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            asset: top-antywir-linux-x86_64
+          - os: windows-latest
+            asset: top-antywir-windows-x86_64.exe
+          - os: macos-latest
+            asset: top-antywir-macos-arm64
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalacja
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller
+          python -m pip install -e . --no-deps
+
+      - name: Build
+        run: >
+          pyinstaller --onefile --console --name top-antywir
+          --paths .
+          --collect-submodules top_antywir
+          --exclude-module customtkinter
+          --exclude-module tkinter
+          --exclude-module PIL
+          packaging/entry_cli.py
+
+      - name: Sprawdź binarkę przed publikacją
+        # Ta sama weryfikacja co w CI — wydanie nie może zawierać binarki,
+        # której nikt nie uruchomił. `scan` zwraca 2 przy infekcji (kontrakt
+        # opisany w README), więc pod `set -e` kod trzeba przechwycić.
+        shell: bash
+        run: |
+          BIN=dist/top-antywir
+          [ -f "dist/top-antywir.exe" ] && BIN=dist/top-antywir.exe
+          "$BIN" --version
+
+          mkdir -p smoke
+          printf 'X5O!P%%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*' > smoke/eicar.txt
+
+          set +e
+          "$BIN" scan smoke > out.txt 2>&1
+          code=$?
+          set -e
+
+          cat out.txt
+          [ "$code" -eq 2 ]
+          grep -q "EICAR-Test-File" out.txt
+
+      - name: Nazwij plik zgodnie z platformą
+        shell: bash
+        run: |
+          mkdir -p upload
+          if [ -f dist/top-antywir.exe ]; then
+            cp dist/top-antywir.exe "upload/${{ matrix.asset }}"
+          else
+            cp dist/top-antywir "upload/${{ matrix.asset }}"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: upload/${{ matrix.asset }}
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    # Ręczne uruchomienie (workflow_dispatch) buduje i sprawdza binarki,
+    # ale nie tworzy wydania — wydanie powstaje tylko z tagu.
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      # gh release potrzebuje repozytorium w katalogu roboczym.
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Suma kontrolna
+        # Binarka antywirusa pobrana z internetu bez sumy kontrolnej to
+        # dokładnie ten scenariusz, przed którym ten program ostrzega.
+        run: |
+          cd artifacts
+          ls -la
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Opublikuj wydanie
+        # `gh` jest preinstalowane na runnerach GitHuba, więc wydanie
+        # powstaje bez zewnętrznej akcji — o jedną zależność, której trzeba
+        # ufać, mniej.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes \
+            artifacts/*

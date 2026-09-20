@@ -1,0 +1,33 @@
+{
+  "name": "example-pack",
+  "hashes": [
+    {
+      "name": "Example-Known-Bad",
+      "sha256": "275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f",
+      "severity": "high",
+      "description": "Suma kontrolna pliku testowego EICAR. Ten sam plik wykrywa wbudowana sygnatura, więc wpis zostanie pominięty jako duplikat — celowo, żeby pokazać zasadę pierwszeństwa sygnatur wbudowanych."
+    },
+    {
+      "name": "Example-Empty-File",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "severity": "low",
+      "description": "SHA-256 pustego pliku. Bezpieczny wpis demonstracyjny — pokazuje, jak wygląda poprawna sygnatura hashowa."
+    }
+  ],
+  "patterns": [
+    {
+      "name": "Example-Suspicious-Downloader",
+      "regex": "(?:curl|wget)\\s+https?://\\S+\\s*\\|\\s*(?:ba)?sh",
+      "flags": ["IGNORECASE"],
+      "severity": "medium",
+      "description": "Pobranie skryptu z sieci i przekazanie go wprost do powłoki. Typowy pierwszy krok instalatora, którego nikt nie przeczytał."
+    },
+    {
+      "name": "Example-Base64-Powershell",
+      "regex": "powershell(?:\\.exe)?\\s+.*-enc(?:odedcommand)?\\s+[A-Za-z0-9+/=]{40,}",
+      "flags": ["IGNORECASE", "DOTALL"],
+      "severity": "high",
+      "description": "PowerShell uruchamiany z poleceniem zakodowanym w base64 — powszechna technika ukrywania treści skryptu."
+    }
+  ]
+}

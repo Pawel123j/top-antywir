@@ -51,7 +51,7 @@ class IterScanTests(unittest.TestCase):
             if i == 4:
                 stop.set()
         # After the stop signal we may emit at most one more file
-        # (the event is checked at the top of the loop), so 5–6 is fine.
+        # (the event is checked at the top of the loop), so 5-6 is fine.
         self.assertLessEqual(len(captured), 6)
         self.assertGreaterEqual(len(captured), 5)
 
@@ -61,8 +61,10 @@ class IterScanTests(unittest.TestCase):
         self.assertEqual(results[0].verdict, Verdict.ERROR)
 
     def test_iter_scan_with_multiple_roots(self) -> None:
-        root_a = self.root / "a"; root_a.mkdir()
-        root_b = self.root / "b"; root_b.mkdir()
+        root_a = self.root / "a"
+        root_a.mkdir()
+        root_b = self.root / "b"
+        root_b.mkdir()
         (root_a / "x.txt").write_text("a")
         (root_b / "y.txt").write_text("b")
         results = list(self.scanner.iter_scan([root_a, root_b]))
