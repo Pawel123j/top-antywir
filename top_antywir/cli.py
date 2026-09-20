@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import signal
 import sys
@@ -13,7 +14,7 @@ from pathlib import Path
 from . import __version__
 from .audit import AuditLog
 from .quarantine import Quarantine
-from .scanner import ScanResult, Scanner, Verdict
+from .scanner import Scanner, ScanResult, Verdict
 from .targets import full_scan_targets, quick_scan_targets
 
 
@@ -30,10 +31,8 @@ def _make_output_robust() -> None:
         reconfigure = getattr(stream, "reconfigure", None)
         if reconfigure is None:
             continue
-        try:
+        with contextlib.suppress(AttributeError, ValueError, OSError):
             reconfigure(errors="backslashreplace")
-        except (AttributeError, ValueError, OSError):
-            pass
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -356,10 +355,7 @@ def run_audit(args: argparse.Namespace) -> int:
 def run_monitor(args: argparse.Namespace) -> int:
     from .monitor import FolderMonitor
 
-    if args.paths:
-        roots = [p.expanduser() for p in args.paths]
-    else:
-        roots = quick_scan_targets()
+    roots = [p.expanduser() for p in args.paths] if args.paths else quick_scan_targets()
     if not roots:
         print("Error: no folders to monitor (none of the defaults exist).",
               file=sys.stderr)
@@ -404,10 +400,10 @@ def run_monitor(args: argparse.Namespace) -> int:
         stop_event.set()
 
     signal.signal(signal.SIGINT, _stop)
-    try:
+    # SIGTERM nie istnieje na każdej platformie i nie da się go ustawić
+    # spoza głównego wątku — brak obsługi jest tu dopuszczalny.
+    with contextlib.suppress(ValueError, AttributeError, OSError):
         signal.signal(signal.SIGTERM, _stop)
-    except (ValueError, AttributeError, OSError):
-        pass
 
     def on_tick(total_scanned: int, _this_tick: int) -> None:
         sys.stderr.write(f"\r  watching...  scanned: {total_scanned:>7}  detections: {detections}")

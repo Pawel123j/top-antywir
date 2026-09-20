@@ -5,11 +5,8 @@ and exits. Safe to run multiple times.
 """
 from __future__ import annotations
 
-import os
 import sys
 import tempfile
-import threading
-import time
 from pathlib import Path
 
 

@@ -11,8 +11,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from .paths import is_linux, is_macos, is_windows
-
+from .paths import is_macos, is_windows
 
 # Directory names to skip when walking. Compared case-insensitively
 # against each path segment.

@@ -15,14 +15,13 @@ the only ones that shell out.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
-from pathlib import Path
 import shlex
 import subprocess
 import sys
+from dataclasses import dataclass
+from pathlib import Path
 
-from .paths import is_linux, is_macos, is_windows
-
+from .paths import is_macos, is_windows
 
 SUPPORTED_MODES = ("quick", "full")
 

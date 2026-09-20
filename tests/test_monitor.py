@@ -17,7 +17,6 @@ from top_antywir.quarantine import Quarantine
 from top_antywir.scanner import Scanner, Verdict
 from top_antywir.signatures import HashSignature
 
-
 _MAL = b"\x07MONITOR-TEST-MALWARE-PAYLOAD\x09" * 3
 _MAL_SHA = hashlib.sha256(_MAL).hexdigest()
 _BENIGN = b"just some harmless text that matches nothing at all\n"

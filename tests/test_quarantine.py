@@ -19,7 +19,6 @@ from top_antywir.quarantine import Quarantine
 from top_antywir.scanner import Scanner, Verdict
 from top_antywir.signatures import HashSignature
 
-
 # A harmless byte string with no malware-like markers; reproducible hash.
 _PAYLOAD = b"\x10\x20TOP-ANTYWIR-TEST-PAYLOAD\x30\x40" * 4
 _PAYLOAD_SHA = hashlib.sha256(_PAYLOAD).hexdigest()
