@@ -1,0 +1,118 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Testy — ${{ matrix.os }} / Python ${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # Bez tego pierwszy czerwony system przerywa pozostałe i nie wiadomo,
+      # czy problem jest ogólny, czy dotyczy jednej platformy. W projekcie,
+      # który chwali się wieloplatformowością, to akurat najważniejsza
+      # informacja z całego przebiegu.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ["3.10", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Instalacja
+        # Bez customtkinter: testy nie dotykają interfejsu graficznego,
+        # a tkinter nie jest dostępny na każdym runnerze bez dodatkowych
+        # pakietów systemowych.
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest
+          python -m pip install -e . --no-deps
+
+      - name: Testy
+        run: python -m pytest
+
+  lint:
+    name: Ruff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Instalacja ruffa
+        # Wersja przypięta: reguły domyślne ruffa zmieniają się między
+        # wydaniami i bez tego CI potrafi zapalić się na czerwono przy
+        # niezmienionym kodzie.
+        run: python -m pip install "ruff==0.16.8"
+
+      - name: Ruff
+        run: ruff check .
+
+  build:
+    name: Binarka — ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalacja
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller
+          python -m pip install -e . --no-deps
+
+      - name: Build CLI
+        # `--collect-submodules` jest konieczne, bo CLI importuje część
+        # modułów leniwie (wewnątrz funkcji), a statyczna analiza
+        # PyInstallera ich wtedy nie widzi i binarka wywala się dopiero
+        # przy uruchomieniu podkomendy.
+        run: >
+          pyinstaller --onefile --console --name top-antywir
+          --paths .
+          --collect-submodules top_antywir
+          --exclude-module customtkinter
+          --exclude-module tkinter
+          --exclude-module PIL
+          packaging/entry_cli.py
+
+      - name: Sprawdź, czy binarka działa
+        # Build, którego nikt nie uruchomił, nie jest dowodem na nic.
+        # EICAR to standardowy, nieszkodliwy plik testowy antywirusów.
+        shell: bash
+        run: |
+          mkdir -p smoke
+          printf 'X5O!P%%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*' > smoke/eicar.txt
+          echo "czysty plik" > smoke/clean.txt
+          BIN=dist/top-antywir
+          [ -f "$BIN.exe" ] && BIN="$BIN.exe"
+          "$BIN" --version
+          "$BIN" scan smoke | tee out.txt
+          grep -qE "Infected: +1" out.txt
+          grep -q "EICAR-Test-File" out.txt
+
+      - name: Zachowaj binarkę
+        uses: actions/upload-artifact@v4
+        with:
+          name: top-antywir-${{ matrix.os }}
+          path: |
+            dist/top-antywir
+            dist/top-antywir.exe
+          if-no-files-found: error
