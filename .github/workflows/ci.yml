@@ -96,17 +96,39 @@ jobs:
       - name: Sprawdź, czy binarka działa
         # Build, którego nikt nie uruchomił, nie jest dowodem na nic.
         # EICAR to standardowy, nieszkodliwy plik testowy antywirusów.
+        #
+        # Kody wyjścia są częścią kontraktu programu (README: 0 czysto,
+        # 1 podejrzane/błędy, 2 infekcja), więc `scan` NA PEWNO zwróci tu
+        # niezerowy kod. Pod `set -e` trzeba go przechwycić, zamiast dać
+        # mu przerwać krok — i przy okazji można go sprawdzić, bo skrypty
+        # użytkowników na tym kodzie polegają.
         shell: bash
         run: |
-          mkdir -p smoke
+          BIN=dist/top-antywir
+          [ -f "dist/top-antywir.exe" ] && BIN=dist/top-antywir.exe
+          "$BIN" --version
+
+          mkdir -p smoke clean
           printf 'X5O!P%%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*' > smoke/eicar.txt
           echo "czysty plik" > smoke/clean.txt
-          BIN=dist/top-antywir
-          [ -f "$BIN.exe" ] && BIN="$BIN.exe"
-          "$BIN" --version
-          "$BIN" scan smoke | tee out.txt
-          grep -qE "Infected: +1" out.txt
-          grep -q "EICAR-Test-File" out.txt
+          echo "czysty plik" > clean/clean.txt
+
+          set +e
+          "$BIN" scan smoke > infected.txt 2>&1
+          infected_code=$?
+          "$BIN" scan clean > clean.txt 2>&1
+          clean_code=$?
+          set -e
+
+          cat infected.txt
+          echo "--- kod wyjścia przy infekcji: $infected_code (oczekiwano 2)"
+          echo "--- kod wyjścia przy czystym:  $clean_code (oczekiwano 0)"
+
+          [ "$infected_code" -eq 2 ]
+          [ "$clean_code" -eq 0 ]
+          grep -qE "Infected: +1" infected.txt
+          grep -q "EICAR-Test-File" infected.txt
+          grep -qE "Infected: +0" clean.txt
 
       - name: Zachowaj binarkę
         uses: actions/upload-artifact@v4
