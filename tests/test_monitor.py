@@ -6,15 +6,17 @@ not race the host's real antivirus.
 from __future__ import annotations
 
 import hashlib
+import os
 import tempfile
 import threading
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from top_antywir.audit import AuditLog
 from top_antywir.monitor import FolderMonitor
 from top_antywir.quarantine import Quarantine
-from top_antywir.scanner import Scanner, Verdict
+from top_antywir.scanner import Scanner, ScanResult, Verdict
 from top_antywir.signatures import HashSignature
 
 _MAL = b"\x07MONITOR-TEST-MALWARE-PAYLOAD\x09" * 3
@@ -124,6 +126,47 @@ class MonitorTests(unittest.TestCase):
         t.join(timeout=5.0)
         self.assertFalse(t.is_alive(), "monitor loop did not stop")
         self.assertEqual(len(detected), 1)
+
+    def test_transient_scan_failure_is_retried_without_file_changes(self) -> None:
+        target = self.watch / "retry.bin"
+        target.write_bytes(_MAL)
+        mon = self._monitor()
+        with patch.object(mon.scanner, "scan_file", return_value=ScanResult(target, Verdict.ERROR, error="access denied")):
+            self.assertEqual(mon.poll(), [])
+        self.assertEqual(len(mon.poll()), 1)
+
+    def test_replacement_same_size_and_mtime_is_scanned(self) -> None:
+        target = self.watch / "replace.bin"
+        target.write_bytes(b"x" * len(_MAL))
+        original = target.stat()
+        mon = self._monitor()
+        mon.prime()
+        replacement = self.root / "new.bin"
+        replacement.write_bytes(_MAL)
+        os.utime(replacement, ns=(original.st_atime_ns, original.st_mtime_ns))
+        replacement.replace(target)
+        self.assertEqual(len(mon.poll()), 1)
+
+    def test_deleted_paths_are_removed_from_snapshot(self) -> None:
+        target = self.watch / "gone.txt"
+        target.write_bytes(_BENIGN)
+        mon = self._monitor()
+        mon.prime()
+        target.unlink()
+        mon.poll()
+        self.assertEqual(mon._snapshot, {})
+
+    def test_real_permission_denial_is_error_and_recovers(self) -> None:
+        target = self.watch / "private.bin"
+        target.write_bytes(_MAL)
+        target.chmod(0)
+        try:
+            if os.access(target, os.R_OK):
+                self.skipTest("Current user can bypass file mode permissions")
+            self.assertEqual(_scanner().scan_file(target).verdict, Verdict.ERROR)
+        finally:
+            target.chmod(0o600)
+        self.assertEqual(_scanner().scan_file(target).verdict, Verdict.INFECTED)
 
     def test_audit_records_monitor_events(self) -> None:
         mon = self._monitor()

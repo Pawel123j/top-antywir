@@ -102,3 +102,12 @@ class JobLabelTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_frozen_executable_is_launched_without_python_module_flags(monkeypatch):
+    import sys
+
+    from top_antywir.schedule import scan_command_argv
+    monkeypatch.setattr(sys, 'frozen', True, raising=False)
+    command = scan_command_argv('quick', quarantine=False)
+    assert command == [sys.executable, 'scan', '--quick', '--no-progress']

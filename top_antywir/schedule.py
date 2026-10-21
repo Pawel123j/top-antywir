@@ -39,7 +39,11 @@ def scan_command_argv(mode: str, quarantine: bool = True) -> list[str]:
     """argv that a scheduled job should execute."""
     if mode not in SUPPORTED_MODES:
         raise ValueError(f"mode must be one of {SUPPORTED_MODES}, got {mode!r}")
-    argv = [sys.executable, "-m", "top_antywir.cli", "scan", f"--{mode}", "--no-progress"]
+    launcher = (
+        [sys.executable] if getattr(sys, "frozen", False)
+        else [sys.executable, "-m", "top_antywir.cli"]
+    )
+    argv = [*launcher, "scan", f"--{mode}", "--no-progress"]
     if quarantine:
         argv.append("--quarantine")
     return argv

@@ -249,3 +249,36 @@ scheduled scans, but a production-ready antivirus would still need:
 - secure licensing and payment handling,
 - independent malware lab testing,
 - legal documents and privacy policy.
+
+## Weryfikacja środowiska — 2026-10-17
+
+`python -m pytest -q`: 65 PASS. CLI uruchomiono na osobnych, tymczasowych plikach: tekst neutralny zwrócił kod 0, nieszkodliwy standardowy wzorzec EICAR kod 2. Nie wykonywano skanowania systemu, kwarantanny plików użytkownika ani rejestracji harmonogramu.
+
+GUI nie zostało sprawdzone z powodu braku sesji graficznej/Xvfb. Test EICAR potwierdza kontrakt skanera i kod wyjścia; nie dowodzi ochrony antywirusowej, jakości heurystyk ani skuteczności na malware. Projekt pozostaje prototypem edukacyjnym. Wydania binarnego i integracji z harmonogramami systemów docelowych nie potwierdzono.
+
+## Walidacja etapu 2 — 2026-10-18
+
+Nowy `tests/test_gui.py` uruchamia rzeczywiste widgety Tk i worker skanowania. Na własnych nieszkodliwych fixtures sprawdza skan, raport HTML, kwarantannę i przywrócenie. Native dialog pliku i potwierdzenia są kontrolowane w teście. Bez DISPLAY test jest SKIPPED; `xvfb-run -a python -m pytest tests/test_gui.py` uruchamia go na Linuksie, a CI ma osobny job.
+
+66 testów (w tym GUI) i Ruff PASS. Zbudowana lokalna binarka PyInstaller przeszła `--version`, neutralną próbkę (exit 0) i testowy EICAR (exit 2). `pip install -e '.[dev]'` obejmuje Pillow dla `scripts/screenshot_gui.py --output ...`; helper obsługuje Linux/Windows i zwraca błąd, jeśli nie zapisze obrazu. W tej chmurze Tk korzysta z ograniczonego fallbacku fontów.
+
+Zwalidowany zakres: edukacyjne CLI i GUI na Linuksie. Windows/macOS, instalatory, integracja harmonogramów systemowych i długotrwały monitoring nie były uruchamiane w etapie 2. Nie jest to potwierdzenie ochrony produkcyjnej.
+
+## Etap 3 — 2026-10-21
+
+71 testów PASS na Linuksie, w tym prawdziwe Tk GUI: skan, raport, kwarantanna i
+przywrócenie własnej nieszkodliwej próbki. Poprawiono ponowienie po błędzie odczytu
+w monitorze, wykrywanie podmiany pliku przy takim samym rozmiarze/mtime i usuwanie
+nieistniejących ścieżek ze snapshotu. Rzeczywisty plik chmod 000 daje ERROR,
+a po przywróceniu uprawnień jest ponownie skanowany. Monitor nadal jest pollingiem,
+nie gwarantuje wykrycia każdej krótkotrwałej zmiany między pollami.
+
+Harmonogram dla binarki PyInstaller używa bezpośrednio pliku wykonywalnego,
+zamiast nieprawidłowego `-m top_antywir.cli`. Test generatora polecenia PASS;
+nie rejestrowano zadań w systemowych harmonogramach użytkownika.
+
+Nowa binarka Linux CLI została zbudowana i uruchomiona: własny czysty plik → 0,
+własny nieszkodliwy wzorzec EICAR → 2. Ruff PASS; aktualny pip-audit: zero znanych
+podatności. Nie zbudowano/uruchomiono Windows ani macOS (PyInstaller wymaga tych
+systemów, nie jest cross-kompilatorem). Status PARTIAL. Żaden z tych wyników
+nie jest dowodem produkcyjnej ochrony antywirusowej.

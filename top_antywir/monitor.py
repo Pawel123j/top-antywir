@@ -25,10 +25,10 @@ from pathlib import Path
 
 from .audit import AuditLog
 from .quarantine import Quarantine
-from .scanner import Scanner, ScanResult
+from .scanner import Scanner, ScanResult, Verdict
 
 # (mtime, size) fingerprint used to decide whether a file changed.
-_Fingerprint = tuple[float, int]
+_Fingerprint = tuple[int, int, int, int]
 
 OnDetection = Callable[[ScanResult], None]
 OnTick = Callable[[int, int], None]  # (scanned_this_tick, detections_this_tick)
@@ -95,21 +95,28 @@ class FolderMonitor:
             self._primed = True
         detections: list[ScanResult] = []
         scanned = 0
+        seen: set[str] = set()
 
         for path in self._iter_all():
             key = str(path)
+            seen.add(key)
             fp = self._fingerprint(path)
             if fp is None:
                 continue
             if self._snapshot.get(key) == fp:
                 continue  # unchanged — skip
-            self._snapshot[key] = fp
             result = self.scanner.scan_file(path)
+            # Failed/unstable reads must be retried even when size/mtime did not change.
+            if result.verdict != Verdict.ERROR and self._fingerprint(path) == fp:
+                self._snapshot[key] = fp
+            else:
+                self._snapshot.pop(key, None)
             scanned += 1
             if result.is_detection:
                 detections.append(result)
                 self._handle_detection(result)
 
+        self._snapshot = {key: fp for key, fp in self._snapshot.items() if key in seen}
         self.stats.ticks += 1
         self.stats.files_scanned += scanned
         self.stats.detections += len(detections)
@@ -180,7 +187,7 @@ class FolderMonitor:
             st = path.stat()
         except OSError:
             return None
-        return (st.st_mtime, st.st_size)
+        return (st.st_mtime_ns, st.st_ctime_ns, st.st_size, st.st_ino)
 
     def _handle_detection(self, result: ScanResult) -> None:
         self.audit.log(
