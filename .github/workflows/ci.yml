@@ -39,7 +39,24 @@ jobs:
           python -m pip install -e . --no-deps
 
       - name: Testy
-        run: python -m pytest
+        run: python -m pytest --junitxml=test-results.xml
+
+      - name: Opublikuj szczegóły nieudanych testów
+        if: failure()
+        shell: python
+        run: |
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+
+          report = Path("test-results.xml")
+          if report.exists():
+              for case in ET.parse(report).iter("testcase"):
+                  for problem in list(case.findall("failure")) + list(case.findall("error")):
+                      name = f"{case.get('classname', '')}.{case.get('name', '')}"
+                      detail = (problem.text or problem.get("message", ""))[-6000:]
+                      message = f"{name}\n{detail}"
+                      message = message.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+                      print(f"::error::{message}")
 
   gui:
     name: Linux GUI scan, report and quarantine restore
