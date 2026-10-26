@@ -10,10 +10,12 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import stat
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from top_antywir.audit import AuditLog
@@ -291,6 +293,51 @@ class QuarantineTests(unittest.TestCase):
         ):
             self.q.add(self.scan_result)
         self.assertEqual(self.src.read_bytes(), b"new user content")
+        self.assertEqual(self.q.list_items(), [])
+
+    def test_transfer_accepts_different_path_and_descriptor_ctime(self) -> None:
+        # Windows Python 3.13 reports creation time through lstat's legacy
+        # ctime, but change time through fstat. The file itself is unchanged.
+        real_lstat = Path.lstat
+
+        def creation_time_stat(path, *args, **kwargs):
+            info = real_lstat(path, *args, **kwargs)
+            return SimpleNamespace(**{
+                name: 0 if name == "st_ctime_ns" else getattr(info, name)
+                for name in dir(info) if name.startswith("st_")
+            })
+
+        with patch.object(Path, "lstat", creation_time_stat):
+            item = self.q.add(self.scan_result)
+            self.assertEqual(self.q.restore(item.item_id).read_bytes(), _PAYLOAD)
+        self.assertEqual(self.q.list_items(), [])
+
+    def test_descriptor_metadata_change_during_copy_preserves_source(self) -> None:
+        real_fstat = os.fstat
+        real_copy = shutil.copyfileobj
+        changed_descriptor = None
+
+        def copy_then_change(source, target):
+            nonlocal changed_descriptor
+            real_copy(source, target)
+            changed_descriptor = source.fileno()
+
+        def changed_stat(descriptor):
+            info = real_fstat(descriptor)
+            if descriptor != changed_descriptor:
+                return info
+            return SimpleNamespace(**{
+                name: info.st_ctime_ns + 1 if name == "st_ctime_ns" else getattr(info, name)
+                for name in dir(info) if name.startswith("st_")
+            })
+
+        with (
+            patch("top_antywir.quarantine.shutil.copyfileobj", side_effect=copy_then_change),
+            patch("top_antywir.quarantine.os.fstat", side_effect=changed_stat),
+            self.assertRaisesRegex(OSError, "Source changed"),
+        ):
+            self.q.add(self.scan_result)
+        self.assertEqual(self.src.read_bytes(), _PAYLOAD)
         self.assertEqual(self.q.list_items(), [])
 
     def test_failed_partial_copy_cleanup_still_preserves_quarantined_file(self) -> None:

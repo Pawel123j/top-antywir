@@ -287,9 +287,15 @@ class Quarantine:
                     shutil.copyfileobj(incoming, outgoing)
                     outgoing.flush()
                     os.fsync(outgoing.fileno())
-                    current_stat = source.lstat()
+                    # Compare timestamps from the same API: on Windows 3.13,
+                    # lstat's legacy ctime can mean creation time while fstat's
+                    # ctime means metadata change time. Path identity is still
+                    # checked separately to detect replacement or symlinks.
+                    current_stat = os.fstat(incoming.fileno())
+                    path_stat = source.lstat()
                     if (
-                        not os.path.samestat(current_stat, source_stat)
+                        not stat.S_ISREG(path_stat.st_mode)
+                        or not os.path.samestat(path_stat, source_stat)
                         or current_stat.st_size != source_stat.st_size
                         or current_stat.st_mtime_ns != source_stat.st_mtime_ns
                         or current_stat.st_ctime_ns != source_stat.st_ctime_ns
