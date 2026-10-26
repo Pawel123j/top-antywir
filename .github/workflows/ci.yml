@@ -34,7 +34,7 @@ jobs:
         # a tkinter nie jest dostępny na każdym runnerze bez dodatkowych
         # pakietów systemowych.
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade "pip>=26.2"
           python -m pip install pytest
           python -m pip install -e . --no-deps
 
@@ -50,6 +50,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: sudo apt-get update && sudo apt-get install -y xvfb python3-tk
+      - run: python -m pip install --upgrade 'pip>=26.2'
       - run: python -m pip install -e '.[dev]'
       - run: xvfb-run -a python -m pytest tests/test_gui.py
 
@@ -87,8 +88,8 @@ jobs:
 
       - name: Instalacja
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install pyinstaller
+          python -m pip install --upgrade "pip>=26.2"
+          python -m pip install "pyinstaller>=6.10" "setuptools>=84.1.0"
           python -m pip install -e . --no-deps
 
       - name: Build CLI

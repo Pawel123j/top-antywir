@@ -35,11 +35,22 @@ A cross-platform antivirus **prototype** written in Python — runs on **Windows
 
 ## Install
 
+The application supports Python 3.10+. Optional icon generation
+(`scripts/make_icon.py`) and screenshot capture (`scripts/screenshot_gui.py`)
+require **Python 3.11+ and Pillow 13+**. Install `.[dev]` on Python 3.11+ to use
+these tools; Python 3.10 installs the test/lint tools without Pillow. Packaged icons
+and the ordinary Tk interface do not require Pillow. Do not install an older,
+vulnerable Pillow just to use image tooling on Python 3.10.
+
+Builds require setuptools 84.1+ (including the PyInstaller environment); this is
+declared in `pyproject.toml` and both packaging workflows.
+
 ### Windows
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade "pip>=26.2"
 pip install -e .
 top-antywir-gui
 ```
@@ -50,6 +61,7 @@ top-antywir-gui
 sudo apt install python3-tk          # required by the GUI
 python3 -m venv .venv
 source .venv/bin/activate
+python -m pip install --upgrade "pip>=26.2"
 pip install -e .
 top-antywir-gui
 ```
@@ -66,6 +78,7 @@ bash packaging/install-desktop.sh
 brew install python-tk@3.12          # (or whichever Python you use; Tk ships in Python.org installers)
 python3 -m venv .venv
 source .venv/bin/activate
+python -m pip install --upgrade "pip>=26.2"
 pip install -e .
 top-antywir-gui
 ```
@@ -159,6 +172,37 @@ Inside the quarantine window: `Ctrl+R` restore · `Delete` purge · `F5` refresh
 | Linux   | `$XDG_DATA_HOME/top-antywir/quarantine`<br>(`~/.local/share/top-antywir/…`) | `$XDG_STATE_HOME/top-antywir/logs/audit.jsonl`           |
 
 User signature packs live next to the quarantine, in a `signatures/` subfolder of the data directory (run `top-antywir signatures dir` to print the exact path).
+
+### Recovering interrupted quarantine operations
+
+Quarantine writes and flushes a recovery journal before transferring a file. The
+transfer copies into a newly created destination, flushes it, and only then removes
+the source. A full disk, denied write or interrupted transfer therefore leaves the
+source in place or a discoverable quarantine entry. This also works when the source
+and quarantine are on different filesystems, at the cost of temporarily needing
+space for both copies. If the source changes during copying, it is not removed.
+
+`quarantine list` and the GUI show files with missing/damaged metadata or a short,
+interrupted copy as **recovery** entries. The existing files and metadata are kept;
+they are never silently reset. Check the original location first: it may still hold
+the complete file. Recover an orphan to a **new** explicit path with:
+
+```bash
+top-antywir quarantine restore ITEM_ID --to /path/to/new-recovered-file
+```
+
+The GUI asks for another destination when the original path is unavailable.
+Restoring never overwrites an occupied path, including dangling symbolic links.
+If a restore is interrupted, the complete quarantine copy remains until copying
+and flushing succeeds. A failed cleanup can leave a partial destination; use a new
+path for retry, and inspect the old one before deleting it yourself. If removing
+the source fails after a successful copy, both complete copies remain. A `recovery`
+entry is a recovery aid, not a claim that an interrupted copy is complete.
+
+Older quarantine journals remain readable. Symbolic-link payloads are refused;
+metadata cannot redirect a restore/delete operation outside the UUID's stored file.
+These are local filesystem safeguards, not tamper protection against another
+process running under the same user account or a guarantee against hardware failure.
 
 ## EICAR Test
 
