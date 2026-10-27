@@ -298,6 +298,8 @@ def run_quarantine(args: argparse.Namespace) -> int:
             return 0
         for item in items:
             print(f"{item.item_id}  {item.verdict:10}  {item.original_path}")
+            if item.recovery_required:
+                print("  Check the original first; recovery may be incomplete. Use restore --to.")
         return 0
 
     if args.quarantine_command == "restore":
@@ -305,7 +307,7 @@ def run_quarantine(args: argparse.Namespace) -> int:
             restored = quarantine.restore(args.item_id, args.to)
             print(f"Restored to: {restored}")
             return 0
-        except (FileExistsError, FileNotFoundError) as exc:
+        except OSError as exc:
             print(f"Error: {exc}", file=sys.stderr)
             return 1
 
@@ -314,7 +316,7 @@ def run_quarantine(args: argparse.Namespace) -> int:
             quarantine.delete(args.item_id)
             print(f"Deleted: {args.item_id}")
             return 0
-        except FileNotFoundError as exc:
+        except OSError as exc:
             print(f"Error: {exc}", file=sys.stderr)
             return 1
 
