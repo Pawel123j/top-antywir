@@ -517,7 +517,9 @@ def print_human_report(
     print(f"Clean:      {counts[Verdict.CLEAN]}")
     print(f"Suspicious: {counts[Verdict.SUSPICIOUS]}")
     print(f"Infected:   {counts[Verdict.INFECTED]}")
-    print(f"Errors:     {counts[Verdict.ERROR]}")
+    print(f"Skipped/errors: {counts[Verdict.ERROR]}")
+    print("Incomplete scan — review skipped paths and errors." if counts[Verdict.ERROR]
+          else "Completed within selected scope; no match does not establish safety.")
     if duration:
         print(f"Duration:   {duration:.1f}s")
     print()

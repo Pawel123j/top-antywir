@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 import stat
+import tempfile
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -44,18 +45,28 @@ class Quarantine:
         self.ensure()
         item_id = uuid.uuid4().hex
         stored_path = self.files_dir / item_id
-        shutil.move(str(result.path), stored_path)
-        self._disarm(stored_path)
-
         item = QuarantineItem(
             item_id=item_id,
-            original_path=result.path,
+            original_path=result.path.resolve(),
             stored_path=stored_path,
             created_at=datetime.now(timezone.utc).isoformat(),
             verdict=result.verdict.value,
             findings=[finding.name for finding in result.findings],
         )
+        # Durable intent comes first: no source data is removed before both
+        # the recovery record and a fully flushed payload exist.
         self._write_metadata(item)
+        temporary = self.files_dir / f".{item_id}.pending"
+        try:
+            with result.path.open("rb") as source, temporary.open("xb") as dest:
+                shutil.copyfileobj(source, dest)
+                dest.flush()
+                os.fsync(dest.fileno())
+            os.replace(temporary, stored_path)
+            self._disarm(stored_path)
+            result.path.unlink()
+        finally:
+            temporary.unlink(missing_ok=True)
         self.audit.log(
             "quarantine.add",
             item_id=item.item_id,
@@ -107,11 +118,33 @@ class Quarantine:
         self.ensure()
         items: list[QuarantineItem] = []
         for meta_file in sorted(self.meta_dir.glob("*.json")):
-            items.append(self._read_metadata(meta_file))
+            try:
+                item = self._read_metadata(meta_file)
+            except (OSError, ValueError, KeyError, TypeError):
+                # One damaged record must not hide other recoverable files.
+                continue
+            if item.stored_path.is_file():
+                items.append(item)
+        known = {item.item_id for item in items}
+        for stored in sorted(self.files_dir.iterdir()):
+            if stored.is_file() and not stored.name.startswith(".") and stored.name not in known:
+                # Recover legacy orphaned payloads without guessing their old path.
+                item = QuarantineItem(
+                    stored.name,
+                    self.root.resolve() / "recovered" / stored.name,
+                    stored,
+                    "unknown",
+                    "recovered",
+                    ["Original metadata unavailable"],
+                )
+                self._write_metadata(item)
+                items.append(item)
         return items
 
     def restore(self, item_id: str, destination: Path | None = None) -> Path:
         self.ensure()
+        if Path(item_id).name != item_id or item_id in {".", ".."}:
+            raise ValueError("Invalid quarantine ID")
         metadata_path = self.meta_dir / f"{item_id}.json"
         if not metadata_path.exists():
             raise FileNotFoundError(f"Unknown quarantine item: {item_id}")
@@ -123,8 +156,22 @@ class Quarantine:
         if target.exists():
             raise FileExistsError(f"Destination already exists: {target}")
 
-        shutil.move(str(item.stored_path), target)
+        # Exclusive creation prevents overwriting a destination created since
+        # the existence check. Keep quarantine intact until the copy is durable.
+        created = False
+        try:
+            with target.open("xb") as output:
+                created = True
+                with item.stored_path.open("rb") as source:
+                    shutil.copyfileobj(source, output)
+                output.flush()
+                os.fsync(output.fileno())
+        except OSError:
+            if created:
+                target.unlink(missing_ok=True)
+            raise
         self._rearm(target)
+        item.stored_path.unlink()
         metadata_path.unlink()
         self.audit.log("quarantine.restore", item_id=item_id, restored_to=target)
         return target
@@ -132,6 +179,8 @@ class Quarantine:
     def delete(self, item_id: str) -> None:
         """Permanently remove a quarantined file and its metadata."""
         self.ensure()
+        if Path(item_id).name != item_id or item_id in {".", ".."}:
+            raise ValueError("Invalid quarantine ID")
         metadata_path = self.meta_dir / f"{item_id}.json"
         if not metadata_path.exists():
             raise FileNotFoundError(f"Unknown quarantine item: {item_id}")
@@ -158,17 +207,25 @@ class Quarantine:
             "verdict": item.verdict,
             "findings": item.findings,
         }
-        (self.meta_dir / f"{item.item_id}.json").write_text(
-            json.dumps(payload, indent=2, sort_keys=True),
-            encoding="utf-8",
-        )
+        descriptor, staging = tempfile.mkstemp(prefix=".record-", dir=self.meta_dir)
+        temporary = Path(staging)
+        try:
+            with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+                json.dump(payload, stream, indent=2, sort_keys=True)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary, self.meta_dir / f"{item.item_id}.json")
+        finally:
+            temporary.unlink(missing_ok=True)
 
     def _read_metadata(self, metadata_path: Path) -> QuarantineItem:
         payload = json.loads(metadata_path.read_text(encoding="utf-8"))
+        if payload["item_id"] != metadata_path.stem:
+            raise ValueError("Quarantine record ID mismatch")
         return QuarantineItem(
             item_id=payload["item_id"],
             original_path=Path(payload["original_path"]),
-            stored_path=Path(payload["stored_path"]),
+            stored_path=self.files_dir / metadata_path.stem,
             created_at=payload["created_at"],
             verdict=payload["verdict"],
             findings=list(payload["findings"]),
