@@ -1094,9 +1094,16 @@ class TopAntywirApp(ctk.CTk):
         item = self._quarantine_selected_item()
         if item is None:
             return
+        prompt = f"Przywrócić plik do oryginalnej lokalizacji?\n\n{item.original_path}"
+        if item.recovery_required:
+            prompt = (
+                "Dane wymagają odzyskania i mogą być niekompletne. "
+                "Najpierw sprawdź oryginalną lokalizację.\n\n"
+                "Odzyskać kopię do nowego, wybranego pliku?"
+            )
         if not messagebox.askyesno(
             "Top Antywir",
-            f"Przywrócić plik do oryginalnej lokalizacji?\n\n{item.original_path}",
+            prompt,
             parent=self._q_window,
         ):
             return
@@ -1105,7 +1112,10 @@ class TopAntywirApp(ctk.CTk):
         except FileExistsError:
             new_target = filedialog.asksaveasfilename(
                 parent=self._q_window,
-                title="Plik docelowy istnieje — wybierz inną lokalizację",
+                title=(
+                    "Odzyskiwanie — wybierz nowy plik" if item.recovery_required
+                    else "Plik docelowy istnieje — wybierz inną lokalizację"
+                ),
                 initialfile=item.original_path.name,
             )
             if not new_target:

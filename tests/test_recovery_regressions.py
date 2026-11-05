@@ -43,7 +43,7 @@ def test_restart_after_payload_commit_recovers_file(tmp_path):
     original_unlink = Path.unlink
 
     def fail_source_removal(path, *args, **kwargs):
-        if path == source:
+        if path.resolve() == source.resolve():
             raise OSError("interrupted before source removal")
         return original_unlink(path, *args, **kwargs)
 
@@ -61,8 +61,13 @@ def test_old_orphan_is_listed_and_restorable(tmp_path):
     quarantine.ensure()
     (quarantine.files_dir / "legacy-orphan").write_bytes(b"recover me")
     [item] = quarantine.list_items()
-    assert item.verdict == "recovered"
-    assert quarantine.restore(item.item_id).read_bytes() == b"recover me"
+    assert item.verdict == "recovery"
+    assert item.recovery_required
+    with pytest.raises(FileExistsError):
+        quarantine.restore(item.item_id)
+    restored = quarantine.restore(item.item_id, tmp_path / "recovered.txt")
+    assert restored.read_bytes() == b"recover me"
+    assert not quarantine.list_items()
 
 
 def test_restore_disk_full_keeps_quarantine(tmp_path):
