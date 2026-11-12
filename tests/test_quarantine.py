@@ -76,8 +76,12 @@ class QuarantineTests(unittest.TestCase):
     def test_restore_returns_file_to_original_location(self) -> None:
         item = self.q.add(self.scan_result)
         restored = self.q.restore(item.item_id)
+        # Windows runners may expose the same temporary directory via a
+        # short (8.3) alias, e.g. RUNNER~1 versus runneradmin.
+        # Compare the restored file identity, not the path spelling.
         self.assertTrue(restored.samefile(self.src))
         self.assertTrue(self.src.exists())
+        self.assertEqual(self.src.read_bytes(), _PAYLOAD)
         self.assertEqual(len(self.q.list_items()), 0)
 
     def test_restore_to_alternate_path(self) -> None:
