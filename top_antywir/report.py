@@ -45,6 +45,7 @@ def render_html_report(
     generated_at: str | None = None,
     counts: dict[Verdict, int] | None = None,
     scanned: int | None = None,
+    cancelled: bool = False,
 ) -> str:
     """Build the full HTML document as a string.
 
@@ -80,10 +81,13 @@ def render_html_report(
     if not detail_rows:
         detail_rows = (
             '<tr><td colspan="3" class="empty">No suspicious, infected '
-            "or errored files — everything scanned came back clean.</td></tr>"
+            "or errored files in retained results; see scope and completion status above.</td></tr>"
         )
 
     return _DOCUMENT.format(
+        completion=("Incomplete scan — cancelled or unreadable/excluded paths; see details."
+                    if cancelled or counts[Verdict.ERROR] else
+                    "Completed within selected scope. No match does not establish safety."),
         version=escape(__version__),
         mode=escape(mode),
         generated_at=escape(generated_at),
@@ -103,13 +107,14 @@ def write_html_report(
     quarantined: dict[str, str] | None = None,
     counts: dict[Verdict, int] | None = None,
     scanned: int | None = None,
+    cancelled: bool = False,
 ) -> Path:
     """Render and write the report to ``path``. Returns the path written."""
     path = path.expanduser()
     path.parent.mkdir(parents=True, exist_ok=True)
     html = render_html_report(
         results, mode=mode, duration=duration, quarantined=quarantined,
-        counts=counts, scanned=scanned,
+        counts=counts, scanned=scanned, cancelled=cancelled,
     )
     path.write_text(html, encoding="utf-8")
     return path
@@ -228,6 +233,7 @@ _DOCUMENT = """<!DOCTYPE html>
       &middot; Generated: {generated_at}</div>
 </header>
 <div class="wrap">
+  <p>{completion}</p>
   <div class="cards">{cards}</div>
   <h2>Detections &amp; errors</h2>
   <table>

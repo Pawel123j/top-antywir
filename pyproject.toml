@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=84.1.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -18,8 +18,10 @@ dependencies = ["customtkinter>=5.2"]
 # Wersja ruffa przypięta tak samo jak w CI: domyślny zestaw reguł zmienia się
 # między wydaniami, a linter, który u każdego mówi co innego, jest gorszy niż
 # brak lintera.
-dev = ["pytest>=8", "ruff==0.16.8", "Pillow>=11.3"]
-build = ["pyinstaller>=6.10"]
+# Image generation/screenshots are optional tooling. Patched Pillow 13 needs
+# Python 3.11; CLI and the Tk GUI continue to support Python 3.10 without it.
+dev = ["pytest>=8", "ruff==0.16.8", "Pillow>=13.0.0; python_version >= '3.11'"]
+build = ["pyinstaller>=6.10", "setuptools>=84.1.0"]
 
 [project.scripts]
 top-antywir = "top_antywir.cli:main"

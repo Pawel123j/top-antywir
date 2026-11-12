@@ -38,7 +38,8 @@ class IterScanTests(unittest.TestCase):
             (sub / "leaked.txt").write_text("you-should-not-scan-me")
 
         results = list(self.scanner.iter_scan([self.root]))
-        scanned_names = {r.path.name for r in results}
+        scanned_names = {r.path.name for r in results if r.verdict != Verdict.ERROR}
+        self.assertEqual(sum(r.verdict == Verdict.ERROR for r in results), 3)
         self.assertEqual(scanned_names, {f"file_{i:03d}.txt" for i in range(5)})
         self.assertNotIn("leaked.txt", scanned_names)
 
