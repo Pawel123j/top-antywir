@@ -178,7 +178,11 @@ executables. A CI result or a local Linux run does not validate another OS.
 Scheduling and long-running monitor behavior depend on each platform's
 services and need separate checks.
 
-## Current local validation — 2026-11-05
+The [Security workflow](.github/workflows/security.yml) adds dependency auditing,
+CodeQL analysis and Git history secret scanning. See [security scope](SECURITY.md)
+for the threat model and the limits of these checks.
+
+## Current local validation — 2026-11-12
 
 - 111 Python tests and 9 subtests pass on Linux with Python 3.12. The GUI
   test is skipped because this environment has no display/Xvfb. Ruff passes.
