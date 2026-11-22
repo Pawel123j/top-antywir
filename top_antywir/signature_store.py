@@ -39,6 +39,10 @@ from .signatures import (
     PatternSignature,
 )
 
+MAX_PACK_BYTES = 2 * 1024 * 1024
+MAX_ENTRIES = 2000
+MAX_FIELD_CHARS = 4096
+
 VALID_SEVERITIES = frozenset({"low", "medium", "high"})
 
 # Only a curated subset of re flags is honoured — enough for real
@@ -91,14 +95,19 @@ def load_pack(path: Path) -> LoadReport:
     """Parse a single pack file. Never raises — problems land in ``errors``."""
     report = LoadReport()
     try:
-        raw = path.read_text(encoding="utf-8")
-    except OSError as exc:
+        with path.open("rb") as stream:
+            raw_bytes = stream.read(MAX_PACK_BYTES + 1)
+        if len(raw_bytes) > MAX_PACK_BYTES:
+            report.errors.append(f"{path.name}: pack exceeds {MAX_PACK_BYTES} bytes")
+            return report
+        raw = raw_bytes.decode("utf-8")
+    except (OSError, UnicodeError) as exc:
         report.errors.append(f"{path.name}: cannot read ({exc})")
         return report
 
     try:
         data = json.loads(raw)
-    except json.JSONDecodeError as exc:
+    except (json.JSONDecodeError, RecursionError) as exc:
         report.errors.append(f"{path.name}: invalid JSON ({exc})")
         return report
 
@@ -106,7 +115,17 @@ def load_pack(path: Path) -> LoadReport:
         report.errors.append(f"{path.name}: top level must be a JSON object")
         return report
 
-    pack_name = str(data.get("name") or path.stem)
+    pack_name = data.get("name", path.stem)
+    if not isinstance(pack_name, str) or not pack_name or len(pack_name) > 256:
+        report.errors.append(f"{path.name}: name must be a nonempty string up to 256 characters")
+        return report
+    for field_name in ("hashes", "patterns"):
+        entries = data.get(field_name, [])
+        if not isinstance(entries, list) or len(entries) > MAX_ENTRIES:
+            report.errors.append(
+                f"{pack_name}: {field_name} must be an array of up to {MAX_ENTRIES} entries"
+            )
+            return report
 
     for i, entry in enumerate(data.get("hashes", []) or []):
         sig, err = _parse_hash(entry, pack_name, i)
@@ -211,9 +230,14 @@ def _parse_hash(entry: object, pack: str, i: int) -> tuple[HashSignature | None,
         return None, f"{where}: not an object"
     name = entry.get("name")
     sha = entry.get("sha256")
-    severity = (entry.get("severity") or "medium").lower()
-    description = entry.get("description") or ""
-    if not name or not isinstance(name, str):
+    severity = entry.get("severity", "medium")
+    description = entry.get("description", "")
+    if not isinstance(severity, str):
+        return None, f"{where}: severity must be a string"
+    severity = severity.lower()
+    if not isinstance(description, str) or len(description) > MAX_FIELD_CHARS:
+        return None, f"{where}: description must be a string up to {MAX_FIELD_CHARS} characters"
+    if not isinstance(name, str) or not name or len(name) > 256:
         return None, f"{where}: missing 'name'"
     if not isinstance(sha, str) or not _HEX64.match(sha):
         return None, f"{where} ({name}): 'sha256' must be 64 hex chars"
@@ -230,20 +254,30 @@ def _parse_pattern(entry: object, pack: str, i: int) -> tuple[PatternSignature |
         return None, f"{where}: not an object"
     name = entry.get("name")
     regex = entry.get("regex")
-    severity = (entry.get("severity") or "medium").lower()
-    description = entry.get("description") or ""
-    if not name or not isinstance(name, str):
+    severity = entry.get("severity", "medium")
+    description = entry.get("description", "")
+    if not isinstance(severity, str):
+        return None, f"{where}: severity must be a string"
+    severity = severity.lower()
+    if not isinstance(description, str) or len(description) > MAX_FIELD_CHARS:
+        return None, f"{where}: description must be a string up to {MAX_FIELD_CHARS} characters"
+    if not isinstance(name, str) or not name or len(name) > 256:
         return None, f"{where}: missing 'name'"
-    if not isinstance(regex, str) or not regex:
+    if not isinstance(regex, str) or not regex or len(regex) > MAX_FIELD_CHARS:
         return None, f"{where} ({name}): missing 'regex'"
     if severity not in VALID_SEVERITIES:
         return None, f"{where} ({name}): severity must be one of {sorted(VALID_SEVERITIES)}"
     flags = 0
-    for flag in entry.get("flags", []) or []:
-        flags |= _FLAG_MAP.get(str(flag).upper(), 0)
+    raw_flags = entry.get("flags", [])
+    if not isinstance(raw_flags, list) or any(
+        not isinstance(flag, str) or flag.upper() not in _FLAG_MAP for flag in raw_flags
+    ):
+        return None, f"{where}: flags must be an array of supported flag names"
+    for flag in raw_flags:
+        flags |= _FLAG_MAP[flag.upper()]
     try:
         compiled = re.compile(regex, flags)
-    except re.error as exc:
+    except (re.error, OverflowError, RecursionError) as exc:
         return None, f"{where} ({name}): bad regex ({exc})"
     return PatternSignature(
         name=name, pattern=compiled, severity=severity, description=str(description)

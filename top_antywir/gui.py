@@ -168,7 +168,7 @@ class TopAntywirApp(ctk.CTk):
 
     def __init__(self) -> None:
         super().__init__(className=self.WM_CLASS)
-        self.title("Top Antywir")
+        self.title("Top Antywir — skaner edukacyjny")
         # customtkinter auto-applies a DPI scaling factor (≈1.25 on a
         # 125%-scaled Windows display), so a literal 960×600 here ends up
         # rendered around 1200×750 physical pixels — a comfortable fit
@@ -191,13 +191,14 @@ class TopAntywirApp(ctk.CTk):
         # accurate counts even though we only retain detections in memory.
         self._last_stats: dict[str, int] = {}
         self._last_duration: float = 0.0
+        self._last_cancelled = False
         # Real-time monitor state.
         self._monitor_stop: threading.Event | None = None
         self._monitor_detections = 0
 
         self.target_var = tk.StringVar()
         self.status_var = tk.StringVar(
-            value="Gotowy.  ⚡ Skanuj / 🚀 Szybkie / 🌐 Pełne  ·  Ctrl+O / Ctrl+Shift+O / F5"
+            value="Skaner edukacyjny. Wybierz plik lub folder → Skanuj → Szczegóły."
         )
         self.progress_var = tk.DoubleVar(value=0.0)
         self.progress_label_var = tk.StringVar(value="")
@@ -253,7 +254,7 @@ class TopAntywirApp(ctk.CTk):
         hdr.grid_columnconfigure(1, weight=1)
         hdr.grid_propagate(False)
 
-        ctk.CTkLabel(hdr, text="🛡", font=ctk.CTkFont(size=30), text_color=ACCENT).grid(
+        ctk.CTkLabel(hdr, text="◉", font=ctk.CTkFont(size=30), text_color=ACCENT).grid(
             row=0, column=0, padx=(20, 6), pady=14, sticky="w"
         )
 
@@ -394,7 +395,7 @@ class TopAntywirApp(ctk.CTk):
         self.card_clean      = _StatCard(cards, "Czyste",       GREEN)
         self.card_suspicious = _StatCard(cards, "Podejrzane",   YELLOW)
         self.card_infected   = _StatCard(cards, "Zainfekowane", RED)
-        self.card_errors     = _StatCard(cards, "Błędy",        GRAY)
+        self.card_errors     = _StatCard(cards, "Pominięcia",   GRAY)
 
         for col, card in enumerate(
             (self.card_clean, self.card_suspicious, self.card_infected, self.card_errors)
@@ -509,7 +510,7 @@ class TopAntywirApp(ctk.CTk):
         right.grid(row=0, column=1, sticky="e", padx=20, pady=7)
 
         self.monitor_btn = ctk.CTkButton(
-            right, text="🛡  Ochrona: WYŁ", command=self.toggle_monitor,
+            right, text="◉  Ochrona: WYŁ", command=self.toggle_monitor,
             height=26, width=158,
             fg_color=BG3, hover_color=BORDER, text_color=FG2,
             border_width=1, border_color=BORDER,
@@ -669,11 +670,7 @@ class TopAntywirApp(ctk.CTk):
                 self.events.put(("detection", result))
             else:  # ERROR
                 stats["errors"] += 1
-                # Don't spam the table with permission-denied noise during
-                # full-system scans; surface only "real" errors.
-                err = (result.error or "").lower()
-                if "permission" not in err and "denied" not in err:
-                    self.events.put(("detection", result))
+                self.events.put(("detection", result))
 
             now = time.monotonic()
             if stats["count"] % 25 == 0 or (now - last_emit) >= 0.15:
@@ -731,7 +728,9 @@ class TopAntywirApp(ctk.CTk):
     def _finalize_scan(self, stats: dict, cancelled: bool) -> None:
         self._update_stats(stats, "")
         detections = stats["suspicious"] + stats["infected"]
-        prefix = "⏹ Przerwano" if cancelled else "✓ Zakończono"
+        prefix = ("⏹ Skan niepełny — przerwano" if cancelled else
+                  "⚠ Skan niepełny — sprawdź pominięcia" if stats["errors"] else
+                  "✓ Skan zakończony — wynik dotyczy sprawdzonych sygnatur")
         duration = time.monotonic() - self._scan_started_at
         self.status_var.set(
             f"{prefix} ({self._scan_label}).  "
@@ -746,6 +745,7 @@ class TopAntywirApp(ctk.CTk):
         self.export_btn.configure(state="normal" if stats["count"] else "disabled")
         self._last_stats = dict(stats)
         self._last_duration = duration
+        self._last_cancelled = cancelled
         self._stop_event = None
 
         self.audit.log(
@@ -876,7 +876,7 @@ class TopAntywirApp(ctk.CTk):
                 Path(path_str), self.results,
                 mode=self._scan_mode or "custom",
                 duration=self._last_duration,
-                counts=counts, scanned=scanned,
+                counts=counts, scanned=scanned, cancelled=self._last_cancelled,
             )
         except OSError as exc:
             messagebox.showerror("Top Antywir", f"Nie udało się zapisać raportu:\n{exc}")
@@ -898,8 +898,8 @@ class TopAntywirApp(ctk.CTk):
         # Already running → request a stop.
         if self._monitor_stop is not None and not self._monitor_stop.is_set():
             self._monitor_stop.set()
-            self.monitor_btn.configure(text="🛡  Ochrona: …", state="disabled")
-            self.status_var.set("🛡 Zatrzymywanie ochrony…")
+            self.monitor_btn.configure(text="◉  Ochrona: …", state="disabled")
+            self.status_var.set("🛡 Zatrzymywanie monitora edukacyjnego…")
             return
 
         roots = quick_scan_targets()
@@ -918,7 +918,7 @@ class TopAntywirApp(ctk.CTk):
             interval=3.0, auto_quarantine=False, audit=self.audit,
         )
         self.monitor_btn.configure(
-            text="🛡  Ochrona: WŁ",
+            text="◉  Ochrona: WŁ",
             fg_color=GREEN, hover_color="#2ea043", text_color="#ffffff",
         )
         self.status_var.set(
@@ -949,7 +949,7 @@ class TopAntywirApp(ctk.CTk):
     def _on_monitor_stopped(self) -> None:
         self._monitor_stop = None
         self.monitor_btn.configure(
-            text="🛡  Ochrona: WYŁ", state="normal",
+            text="◉  Ochrona: WYŁ", state="normal",
             fg_color=BG3, hover_color=BORDER, text_color=FG2,
         )
         self.status_var.set(
@@ -1094,9 +1094,16 @@ class TopAntywirApp(ctk.CTk):
         item = self._quarantine_selected_item()
         if item is None:
             return
+        prompt = f"Przywrócić plik do oryginalnej lokalizacji?\n\n{item.original_path}"
+        if item.recovery_required:
+            prompt = (
+                "Dane wymagają odzyskania i mogą być niekompletne. "
+                "Najpierw sprawdź oryginalną lokalizację.\n\n"
+                "Odzyskać kopię do nowego, wybranego pliku?"
+            )
         if not messagebox.askyesno(
             "Top Antywir",
-            f"Przywrócić plik do oryginalnej lokalizacji?\n\n{item.original_path}",
+            prompt,
             parent=self._q_window,
         ):
             return
@@ -1105,7 +1112,10 @@ class TopAntywirApp(ctk.CTk):
         except FileExistsError:
             new_target = filedialog.asksaveasfilename(
                 parent=self._q_window,
-                title="Plik docelowy istnieje — wybierz inną lokalizację",
+                title=(
+                    "Odzyskiwanie — wybierz nowy plik" if item.recovery_required
+                    else "Plik docelowy istnieje — wybierz inną lokalizację"
+                ),
                 initialfile=item.original_path.name,
             )
             if not new_target:

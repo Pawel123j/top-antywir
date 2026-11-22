@@ -1,40 +1,29 @@
-# Zrzuty ekranu GUI
+# GUI screenshots
 
-Ten katalog jest pusty celowo.
+`gui-idle.png` and `gui-detection.png` come from the running CustomTkinter
+application on Linux under Xvfb. The detection image shows one match from an
+inert plain-text fixture; it is not a malware sample and nothing in it was
+executed.
 
-Zrzuty interfejsu graficznego wymagają środowiska z tkinterem i serwerem
-okien. `scripts/screenshot_gui.py` w obecnej postaci działa wyłącznie na
-Windowsie — używa `ctypes.windll.user32.FindWindowW` do namierzenia okna
-i `PIL.ImageGrab` do zrobienia zrzutu.
-
-Wstawienie tu wizualizacji albo makiety zamiast prawdziwego zrzutu byłoby
-gorsze niż brak obrazka: czytelnik nie miałby jak odróżnić jednego od
-drugiego.
-
-## Jak je zrobić (Windows)
+With Tk, Pillow, and a display available, capture the idle window with:
 
 ```bash
-pip install -e . pillow
-python scripts/screenshot_gui.py
+python scripts/screenshot_gui.py --output docs/screenshots/gui-idle.png
 ```
 
-Plik ląduje w `%TEMP%\top-antywir-shot.png`. Skopiuj go tutaj i podlinkuj
-w README.
+To show the real scan-result flow, make a static text fixture and pass its path:
 
-## Co warto pokazać
+```bash
+cat > /tmp/top-antywir-demo.txt <<'EOF'
+Static text used to demonstrate signature matching. Never execute this file.
+powershell.exe -EncodedCommand NOT_EXECUTED_DEMO_VALUE
+EOF
 
-| Nazwa pliku | Widok |
-|---|---|
-| `gui-idle.png` | Okno startowe |
-| `gui-scan-running.png` | Skanowanie w toku, z paskiem postępu |
-| `gui-detection.png` | Wykryte zagrożenie (najlepiej na pliku EICAR) |
-| `gui-quarantine.png` | Zakładka kwarantanny z pozycją do przywrócenia |
-| `gui-monitor.png` | Monitor katalogów w trybie aktywnym |
+python scripts/screenshot_gui.py \
+  --scan-target /tmp/top-antywir-demo.txt \
+  --output docs/screenshots/gui-detection.png
+```
 
-## Co trzeba by zmienić, żeby robić je automatycznie
-
-`scripts/screenshot_gui.py` musiałby stracić zależność od `windll`:
-na Linuksie zrzut robi się przez `PIL.ImageGrab.grab(xdisplay=":99")` pod
-`xvfb-run`, na macOS przez `screencapture`. Wtedy dałoby się dołożyć zadanie
-CI, które wygeneruje te obrazki przy każdym wydaniu — i przy okazji wyłapie
-sytuację, w której GUI przestaje się w ogóle uruchamiać.
+On Linux, the helper works under `xvfb-run`; on Windows it uses the native
+window bounds when available. The screenshot only records the application
+window—it does not create a substitute for a running GUI.

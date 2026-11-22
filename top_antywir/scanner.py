@@ -89,15 +89,18 @@ class Scanner:
                 progress_callback(1, 1, target)
             return [result]
 
-        files = list(self._iter_files(target))
+        files = list(self._iter_entries(target))
         total = len(files)
         results: list[ScanResult] = []
         for i, file_path in enumerate(files):
             if progress_callback:
-                progress_callback(i, total, file_path)
-            results.append(self.scan_file(file_path))
+                progress_path = file_path.path if isinstance(file_path, ScanResult) else file_path
+                progress_callback(i, total, progress_path)
+            result = file_path if isinstance(file_path, ScanResult) else self.scan_file(file_path)
+            results.append(result)
         if progress_callback and files:
-            progress_callback(total, total, files[-1])
+            last = files[-1]
+            progress_callback(total, total, last.path if isinstance(last, ScanResult) else last)
         return results
 
     def iter_scan(
@@ -130,10 +133,10 @@ class Scanner:
                 yield self.scan_file(target)
                 continue
 
-            for file_path in self._iter_files(target):
+            for file_path in self._iter_entries(target):
                 if stop_event is not None and stop_event.is_set():
                     return
-                yield self.scan_file(file_path)
+                yield file_path if isinstance(file_path, ScanResult) else self.scan_file(file_path)
 
     def scan_file(self, path: Path) -> ScanResult:
         try:
@@ -187,15 +190,43 @@ class Scanner:
         yield from self._iter_files(root)
 
     def _iter_files(self, root: Path) -> Iterator[Path]:
-        excl_dirs = self.excluded_dir_names
-        excl_files = self.excluded_file_names
-        for dirpath, dirnames, filenames in os.walk(root, followlinks=False, onerror=None):
-            # Prune excluded directories in place so os.walk skips them
-            dirnames[:] = [d for d in dirnames if d.lower() not in excl_dirs]
+        for entry in self._iter_entries(root):
+            if isinstance(entry, Path):
+                yield entry
+
+    def _iter_entries(self, root: Path) -> Iterator[Path | ScanResult]:
+        errors: list[OSError] = []
+        for dirpath, dirnames, filenames in os.walk(
+            root, followlinks=False, onerror=errors.append
+        ):
+            while errors:
+                exc = errors.pop(0)
+                yield ScanResult(Path(exc.filename or root), Verdict.ERROR, error=str(exc))
+            kept = []
+            for name in dirnames:
+                path = Path(dirpath) / name
+                if name.lower() in self.excluded_dir_names or path.is_symlink():
+                    yield ScanResult(
+                        path,
+                        Verdict.ERROR,
+                        error="Skipped directory: exclusion or symbolic link.",
+                    )
+                else:
+                    kept.append(name)
+            dirnames[:] = kept
             for filename in filenames:
-                if filename.lower() in excl_files:
-                    continue
-                yield Path(dirpath) / filename
+                path = Path(dirpath) / filename
+                if filename.lower() in self.excluded_file_names or path.is_symlink():
+                    yield ScanResult(
+                        path,
+                        Verdict.ERROR,
+                        error="Skipped file: exclusion or symbolic link.",
+                    )
+                else:
+                    yield path
+        while errors:
+            exc = errors.pop(0)
+            yield ScanResult(Path(exc.filename or root), Verdict.ERROR, error=str(exc))
 
     # How many leading bytes to retain in memory for pattern + heuristic
     # analysis. The full file is still hashed.
