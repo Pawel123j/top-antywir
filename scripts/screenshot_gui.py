@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 
@@ -16,6 +17,10 @@ def main() -> int:
     parser.add_argument(
         "--output", type=Path,
         default=Path(tempfile.gettempdir()) / "top-antywir-shot.png",
+    )
+    parser.add_argument(
+        "--scan-target", type=Path,
+        help="Run the GUI scan on this file or folder before capturing the window.",
     )
     args = parser.parse_args()
     # Run the GUI in this process — easier to screenshot the right window.
@@ -59,8 +64,27 @@ def main() -> int:
         finally:
             app.after(50, app.destroy)
 
-    # Wait for the window to be fully rendered and topmost before shooting.
-    app.after(700, shoot_and_exit)
+    if args.scan_target:
+        def start_scan_and_wait() -> None:
+            app.target_var.set(str(args.scan_target.expanduser().resolve()))
+            app.start_scan_custom()
+            deadline = time.monotonic() + 30
+
+            def wait_for_scan() -> None:
+                if app._stop_event is None:
+                    app.after(850, shoot_and_exit)
+                elif time.monotonic() >= deadline:
+                    print("GUI scan did not finish within 30 seconds", file=sys.stderr)
+                    app.after(50, app.destroy)
+                else:
+                    app.after(50, wait_for_scan)
+
+            app.after(50, wait_for_scan)
+
+        app.after(700, start_scan_and_wait)
+    else:
+        # Wait for the window to be fully rendered and topmost before shooting.
+        app.after(700, shoot_and_exit)
     app.mainloop()
     return 0 if success else 1
 
