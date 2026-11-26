@@ -474,6 +474,48 @@ class QuarantineTests(unittest.TestCase):
             self.q.add(self.scan_result)
         self.assertEqual(self.src.read_bytes(), _PAYLOAD)
 
+    def test_same_named_files_get_separate_records_and_restore_intact(self) -> None:
+        # Two neutral files share a basename in different folders. Each must
+        # keep its own record, payload and original path; neither overwrites
+        # the other, and each restores to its own place with its own bytes.
+        contents = {"a": b"alpha neutral text\n", "b": b"bravo neutral text\n"}
+        scanner = Scanner(
+            hash_signatures=tuple(
+                HashSignature(f"Test-{key}", hashlib.sha256(data).hexdigest(), "high", "test")
+                for key, data in contents.items()
+            ),
+            pattern_signatures=(),
+        )
+        paths = {}
+        for key, data in contents.items():
+            path = self.root / key / "report.txt"
+            path.parent.mkdir()
+            path.write_bytes(data)
+            paths[key] = path
+
+        items = {key: self.q.add(scanner.scan_file(path)) for key, path in paths.items()}
+
+        self.assertNotEqual(items["a"].item_id, items["b"].item_id)
+        self.assertNotEqual(items["a"].stored_path, items["b"].stored_path)
+        restarted = Quarantine(self.q.root, audit=self.audit)
+        listed = {item.item_id: item for item in restarted.list_items()}
+        self.assertEqual(set(listed), {items["a"].item_id, items["b"].item_id})
+        for key, item in items.items():
+            self.assertFalse(paths[key].exists())
+            # Compare folder identity: Windows may spell temp paths as 8.3 aliases.
+            original = listed[item.item_id].original_path
+            self.assertEqual(original.name, "report.txt")
+            self.assertTrue(original.parent.samefile(paths[key].parent))
+            self.assertEqual(listed[item.item_id].stored_path.read_bytes(), contents[key])
+            self.assertFalse(listed[item.item_id].recovery_required)
+
+        # Restore in reverse order: the record, not insertion order, decides.
+        for key in ("b", "a"):
+            self.assertEqual(self.q.restore(items[key].item_id).read_bytes(), contents[key])
+        for key, path in paths.items():
+            self.assertEqual(path.read_bytes(), contents[key])
+        self.assertEqual(self.q.list_items(), [])
+
     def test_delete_purges_file_and_metadata(self) -> None:
         item = self.q.add(self.scan_result)
         self.q.delete(item.item_id)
