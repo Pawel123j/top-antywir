@@ -9,7 +9,7 @@ from pathlib import Path
 
 from top_antywir.quarantine import Quarantine
 from top_antywir.scanner import Scanner, Verdict
-from top_antywir.signatures import HashSignature
+from top_antywir.signatures import HASH_SIGNATURES, PATTERN_SIGNATURES, HashSignature
 
 TEST_MALWARE_SAMPLE = b"top-antywir harmless hash test fixture\n"
 
@@ -60,6 +60,33 @@ class ScannerTests(unittest.TestCase):
 
             self.assertEqual(result.verdict, Verdict.SUSPICIOUS)
             self.assertTrue(any(f.name == "Executable-Shell-Script" for f in result.findings))
+
+    def test_empty_and_neutral_text_files_are_clean_with_exact_hash(self) -> None:
+        # Built-in signatures only, so user packs on disk cannot change it.
+        scanner = Scanner(hash_signatures=HASH_SIGNATURES, pattern_signatures=PATTERN_SIGNATURES)
+        cases = {
+            "empty.txt": b"",
+            "note.txt": b"hello world\n",
+        }
+        expected_sha = {
+            # Independent SHA-256 values, not computed by the scanner.
+            "empty.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "note.txt": "a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447",
+        }
+        with project_temp_directory() as tmp:
+            for name, content in cases.items():
+                with self.subTest(name=name):
+                    path = Path(tmp) / name
+                    path.write_bytes(content)
+
+                    result = scanner.scan_file(path)
+
+                    self.assertEqual(result.verdict, Verdict.CLEAN)
+                    self.assertEqual(result.findings, [])
+                    self.assertIsNone(result.error)
+                    self.assertEqual(result.sha256, expected_sha[name])
+                    self.assertFalse(result.is_detection)
+                    self.assertEqual(path.read_bytes(), content)
 
     def test_quarantine_moves_and_restores_file(self) -> None:
         with project_temp_directory() as tmp:
