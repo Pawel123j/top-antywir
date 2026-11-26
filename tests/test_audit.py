@@ -1,12 +1,16 @@
 """Tests for the audit log."""
 from __future__ import annotations
 
+import hashlib
 import json
 import tempfile
 import unittest
 from pathlib import Path
 
 from top_antywir.audit import AuditLog
+from top_antywir.quarantine import Quarantine
+from top_antywir.scanner import Scanner
+from top_antywir.signatures import HashSignature
 
 
 class AuditLogTests(unittest.TestCase):
@@ -55,6 +59,48 @@ class AuditLogTests(unittest.TestCase):
         # but should NOT raise — the audit log must never crash callers.
         bad = AuditLog(path=Path(self._tmp.name))
         bad.log("event", x=1)  # should not raise
+
+    def test_quarantine_and_restore_history_is_recorded(self) -> None:
+        # UTF-8 Polish name (any OS) and the same name as CP1250 bytes on a
+        # UTF-8 filesystem, which Python exposes with lone surrogates.
+        names = {"utf8": "zażółć.bin", "cp1250": "za\udcbf\udcf3\udcb3\udce6.bin"}
+        payload = b"\x10TOP-ANTYWIR-AUDIT-HISTORY\x20" * 3
+        scanner = Scanner(
+            hash_signatures=(HashSignature(
+                "Audit-Test", hashlib.sha256(payload).hexdigest(), "high", "test",
+            ),),
+            pattern_signatures=(),
+        )
+        for label, name in names.items():
+            with self.subTest(name=label):
+                root = Path(self._tmp.name) / label
+                root.mkdir()
+                source = root / name
+                try:
+                    source.write_bytes(payload)
+                except (OSError, UnicodeEncodeError):
+                    self.skipTest("filesystem cannot store this file name")
+                log = AuditLog(path=root / "audit.jsonl")
+                quarantine = Quarantine(root / "q", audit=log)
+
+                item = quarantine.add(scanner.scan_file(source))
+                restored = quarantine.restore(item.item_id)
+
+                self.assertEqual(restored.read_bytes(), payload)
+                restore, add = log.read_recent(limit=2)
+                self.assertEqual((add.event, restore.event),
+                                 ("quarantine.add", "quarantine.restore"))
+                self.assertEqual(add.data["item_id"], restore.data["item_id"])
+                self.assertEqual(add.data["item_id"], item.item_id)
+                self.assertEqual(add.data["original_path"], str(item.original_path))
+                self.assertEqual(restore.data["restored_to"], str(restored))
+                self.assertEqual(add.data["findings"], ["Audit-Test"])
+                # Every record is strict UTF-8 JSON.
+                for raw in log.path.read_bytes().decode("utf-8").splitlines():
+                    json.loads(raw)
+
+    def test_unserialisable_data_does_not_raise(self) -> None:
+        self.log.log("event", value=object())  # should not raise
 
 
 if __name__ == "__main__":
