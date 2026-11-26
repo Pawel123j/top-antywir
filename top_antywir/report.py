@@ -109,14 +109,21 @@ def write_html_report(
     scanned: int | None = None,
     cancelled: bool = False,
 ) -> Path:
-    """Render and write the report to ``path``. Returns the path written."""
+    """Render and write the report to ``path``. Returns the path written.
+
+    The file is always valid UTF-8. Names that are valid Unicode (e.g.
+    ``zażółć.txt``) appear verbatim. Bytes that cannot be decoded with the
+    filesystem encoding (e.g. a CP1250 name on a UTF-8 Linux system), which
+    Python carries as lone surrogates, are written as visible escapes such
+    as ``\\udcbf`` instead of aborting the whole report.
+    """
     path = path.expanduser()
     path.parent.mkdir(parents=True, exist_ok=True)
     html = render_html_report(
         results, mode=mode, duration=duration, quarantined=quarantined,
         counts=counts, scanned=scanned, cancelled=cancelled,
     )
-    path.write_text(html, encoding="utf-8")
+    path.write_text(html, encoding="utf-8", errors="backslashreplace")
     return path
 
 

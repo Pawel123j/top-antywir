@@ -68,6 +68,26 @@ class ReportTests(unittest.TestCase):
             self.assertTrue(written.exists())
             self.assertIn("<!DOCTYPE html>", written.read_text(encoding="utf-8"))
 
+    def test_polish_names_are_readable_from_written_report(self) -> None:
+        finding = [Finding("Polish-Test", "medium", "Zażółć gęślą jaźń")]
+        utf8_name = "zażółć gęślą jaźń.sh"
+        # "zażółć.sh" encoded in CP1250 and decoded by a UTF-8 filesystem
+        # (os.fsdecode with surrogateescape): b"za\xbf\xf3\xb3\xe6.sh".
+        cp1250_name = "za\udcbf\udcf3\udcb3\udce6.sh"
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "raport-źćł.html"
+            written = write_html_report(out, [
+                _result(utf8_name, Verdict.SUSPICIOUS, finding),
+                _result(cp1250_name, Verdict.SUSPICIOUS, finding),
+            ])
+            self.assertEqual(written.name, "raport-źćł.html")
+            # Strict decode: the whole file must be valid UTF-8.
+            html = written.read_bytes().decode("utf-8")
+        self.assertIn(utf8_name, html)
+        self.assertIn("Zażółć gęślą jaźń", html)
+        self.assertIn(r"za\udcbf\udcf3\udcb3\udce6.sh", html)
+        self.assertIn("</html>", html)
+
 
 if __name__ == "__main__":
     unittest.main()
