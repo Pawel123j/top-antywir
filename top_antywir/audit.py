@@ -37,9 +37,14 @@ class AuditLog:
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             line = json.dumps(asdict(entry), ensure_ascii=False)
-            with self.path.open("a", encoding="utf-8") as fh:
+            # Undecodable file names (e.g. CP1250 bytes on a UTF-8 system)
+            # arrive as lone surrogates. They only occur inside JSON strings,
+            # where backslashreplace emits a valid "\udcXX" escape, so the
+            # record stays valid UTF-8 JSON and json.loads restores the exact
+            # original str.
+            with self.path.open("a", encoding="utf-8", errors="backslashreplace") as fh:
                 fh.write(line + "\n")
-        except OSError:
+        except (OSError, TypeError, ValueError):
             # Never crash the scanner because of audit-log issues.
             pass
 
