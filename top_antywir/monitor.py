@@ -4,6 +4,9 @@ A dependency-free, cross-platform watcher: it takes a baseline snapshot of
 the files under one or more roots, then on each poll re-walks them and
 scans whatever is **new or has changed** (mtime/size) since the snapshot.
 Detections are reported through a callback and can be auto-quarantined.
+Roots are resolved to absolute, canonical paths, so one file is reported
+at most once per cycle even when the same folder is given twice under
+different spellings or overlapping roots; reported paths are absolute.
 
 This is the portable backend — it polls rather than using kernel
 notifications (inotify / FSEvents / ReadDirectoryChangesW). That keeps it
@@ -56,7 +59,9 @@ class FolderMonitor:
         audit: AuditLog | None = None,
     ) -> None:
         self.scanner = scanner
-        self.roots = [Path(r).expanduser() for r in roots]
+        # Canonical, de-duplicated roots: "~/w", "./w" and "w/sub/.." name the
+        # same folder and must not yield two notifications for one file.
+        self.roots = list(dict.fromkeys(self._canonical_root(r) for r in roots))
         self.interval = max(0.2, float(interval))
         self.auto_quarantine = auto_quarantine
         self.quarantine = quarantine
@@ -99,6 +104,8 @@ class FolderMonitor:
 
         for path in self._iter_all():
             key = str(path)
+            if key in seen:
+                continue  # already handled this cycle via an overlapping root
             seen.add(key)
             fp = self._fingerprint(path)
             if fp is None:
@@ -168,6 +175,14 @@ class FolderMonitor:
         return self.stats
 
     # ── Internals ───────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _canonical_root(root: Path) -> Path:
+        path = Path(root).expanduser()
+        try:
+            return path.resolve()
+        except (OSError, RuntimeError):
+            return path.absolute()
 
     def _iter_all(self):
         for root in self.roots:
