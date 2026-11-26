@@ -168,6 +168,28 @@ class MonitorTests(unittest.TestCase):
             target.chmod(0o600)
         self.assertEqual(_scanner().scan_file(target).verdict, Verdict.INFECTED)
 
+    def test_one_file_one_notification_for_equivalent_or_overlapping_roots(self) -> None:
+        sub = self.watch / "sub"
+        sub.mkdir()
+        cases = {
+            "single root": [self.watch],
+            "same dir, two spellings": [self.watch, sub / ".."],
+            "parent and child": [self.watch, sub],
+        }
+        for name, roots in cases.items():
+            with self.subTest(roots=name):
+                evil = sub / "evil.bin"
+                evil.unlink(missing_ok=True)
+                mon = FolderMonitor(_scanner(), roots, audit=self.audit)
+                mon.prime()
+                evil.write_bytes(_MAL)
+                with patch.object(mon.scanner, "scan_file", wraps=mon.scanner.scan_file) as scan:
+                    detections = mon.poll()
+                self.assertEqual(len(detections), 1)
+                self.assertTrue(detections[0].path.samefile(evil))
+                self.assertEqual(scan.call_count, 1)
+                self.assertEqual(mon.poll(), [])
+
     def test_audit_records_monitor_events(self) -> None:
         mon = self._monitor()
         mon.prime()
